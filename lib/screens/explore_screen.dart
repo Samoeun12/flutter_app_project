@@ -2,10 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_app_project/models/models.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:flowbite_icons/flowbite_icons.dart'; // Flowbite imported!
 import 'dart:ui' as ui;
 
 import '../data/mock_data.dart';
-import '../utils/theme.dart'; // <--- REQUIRED FOR DRAWING CUSTOM MARKERS
+import '../utils/theme.dart';
+import '../widgets/shimmer_image.dart';
+import 'unit_detail_screen.dart';
 
 class ExploreScreen extends StatefulWidget {
   const ExploreScreen({super.key});
@@ -28,30 +31,24 @@ class _ExploreScreenState extends State<ExploreScreen> {
   @override
   void initState() {
     super.initState();
-    // Replaced the old method with the new async version
     _loadCustomMarkers(); 
   }
 
-  // --- NEW: ASYNC MARKER GENERATOR ---
   Future<void> _loadCustomMarkers() async {
     Set<Marker> tempMarkers = {};
 
     for (var unit in mockUnits) {
-      // 1. Format the price to match the image (e.g., 150000 -> "$150k")
       String priceText = unit.price >= 1000000
           ? "\$${(unit.price / 1000000).toStringAsFixed(2)}M"
           : "\$${(unit.price / 1000).toStringAsFixed(0)}k";
 
-      // 2. Generate the custom image bitmap
       final BitmapDescriptor customIcon = await _createCustomMarkerBitmap(priceText);
 
-      // 3. Add to the marker set
       tempMarkers.add(
         Marker(
           markerId: MarkerId(unit.id),
           position: LatLng(unit.lat, unit.lng),
           icon: customIcon,
-          // We removed the InfoWindow because the price is already on the marker!
           onTap: () {
             final index = mockUnits.indexOf(unit);
             _pageController.animateToPage(
@@ -64,57 +61,51 @@ class _ExploreScreenState extends State<ExploreScreen> {
       );
     }
 
-    // Update the state once all markers are drawn
     setState(() {
       _markers = tempMarkers;
     });
   }
 
-  // --- NEW: CANVAS DRAWING LOGIC FOR THE BUBBLE ---
   Future<BitmapDescriptor> _createCustomMarkerBitmap(String price) async {
     final ui.PictureRecorder pictureRecorder = ui.PictureRecorder();
     final Canvas canvas = Canvas(pictureRecorder);
-    final Paint paint = Paint()..color = const Color(0xFF1E548E); // Match the blue from the image
+    final Paint paint = Paint()..color = AppColors.primary; 
 
-    const double width = 160;
-    const double height = 80;
-    const double arrowHeight = 20;
+    const double width = 140; 
+    const double height = 70;
+    const double arrowHeight = 16;
     const double radius = 16;
 
-    // 1. Draw the rounded rectangle
     final RRect rrect = RRect.fromRectAndRadius(
       const Rect.fromLTWH(0, 0, width, height),
       const Radius.circular(radius),
     );
     canvas.drawRRect(rrect, paint);
 
-    // 2. Draw the downward pointing triangle (arrow)
     final Path path = Path();
-    path.moveTo(width / 2 - 15, height); // Left point
-    path.lineTo(width / 2, height + arrowHeight); // Bottom point
-    path.lineTo(width / 2 + 15, height); // Right point
+    path.moveTo(width / 2 - 12, height); 
+    path.lineTo(width / 2, height + arrowHeight); 
+    path.lineTo(width / 2 + 12, height); 
     path.close();
     canvas.drawPath(path, paint);
 
-    // 3. Draw the text inside the bubble
     final TextPainter textPainter = TextPainter(textDirection: TextDirection.ltr);
     textPainter.text = TextSpan(
       text: price,
       style: const TextStyle(
-        fontSize: 36, // Large size to stay crisp on high-res screens
+        fontSize: 30, 
         color: Colors.white,
-        fontWeight: FontWeight.bold,
+        fontWeight: FontWeight.w900,
+        letterSpacing: -0.5,
       ),
     );
     textPainter.layout();
     
-    // Center the text inside the rounded rectangle
     textPainter.paint(
       canvas,
       Offset((width - textPainter.width) / 2, (height - textPainter.height) / 2),
     );
 
-    // 4. Convert the drawing into a PNG image bytes
     final ui.Picture picture = pictureRecorder.endRecording();
     final ui.Image image = await picture.toImage(width.toInt(), (height + arrowHeight).toInt());
     final ByteData? byteData = await image.toByteData(format: ui.ImageByteFormat.png);
@@ -141,7 +132,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
         children: [
           GoogleMap(
             initialCameraPosition: _initialPosition,
-            markers: _markers, // This now holds our custom drawn markers!
+            markers: _markers, 
             myLocationEnabled: true,
             zoomControlsEnabled: false, 
             mapToolbarEnabled: false,
@@ -153,34 +144,48 @@ class _ExploreScreenState extends State<ExploreScreen> {
             },
           ),
 
+          // --- REFINED: Search Bar with SafeArea ---
           Positioned(
-            top: 50, left: 20, right: 20,
+            top: MediaQuery.of(context).padding.top + 16, 
+            left: 20, right: 20,
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              height: 50,
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              height: 56, 
               decoration: BoxDecoration(
                 color: Colors.white,
-                borderRadius: BorderRadius.circular(25),
-                boxShadow: [BoxShadow(color: Colors.black.withValues( alpha: 0.1), blurRadius: 10)],
+                borderRadius: BorderRadius.circular(30),
+                boxShadow: [
+                  BoxShadow(color: Colors.black.withValues(alpha: 0.08), blurRadius: 20, offset: const Offset(0, 4))
+                ],
               ),
-              child: const Row(
+              child: Row(
                 children: [
-                  Icon(Icons.search, color: Colors.grey),
-                  SizedBox(width: 10),
-                  Expanded(
+                  // FIXED: Using FlowbiteOutlineIcons
+                  const Icon(FlowbiteOutlineIcons.search, color: Colors.grey, size: 20),
+                  const SizedBox(width: 12),
+                  const Expanded(
                     child: TextField(
-                      decoration: InputDecoration(hintText: "Search areas...", border: InputBorder.none),
+                      decoration: InputDecoration(
+                        hintText: "Search areas or projects...", 
+                        hintStyle: TextStyle(fontSize: 14, color: Colors.black45),
+                        border: InputBorder.none,
+                      ),
                     ),
                   ),
-                  Icon(Icons.tune, color: AppColors.primary),
+                  Container(
+                    height: 24, width: 1, color: Colors.grey, margin: const EdgeInsets.symmetric(horizontal: 12),
+                  ),
+                  // Safely using Material Icon for the filter tuner
+                  const Icon(Icons.tune, color: AppColors.primary, size: 22),
                 ],
               ),
             ),
           ),
 
+          // --- REFINED: Property PageView ---
           Positioned(
             bottom: 20, left: 0, right: 0,
-            height: 140, 
+            height: 145, 
             child: PageView.builder(
               controller: _pageController,
               itemCount: mockUnits.length,
@@ -198,83 +203,96 @@ class _ExploreScreenState extends State<ExploreScreen> {
   }
 
   Widget _buildMapCard(PropertyUnit unit) {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(24), 
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues( alpha: 0.08 ), 
-            blurRadius: 15, 
-            offset: const Offset(0, 5)
-          )
-        ],
-      ),
-      child: Row(
-        children: [
-          ClipRRect(
-            borderRadius: BorderRadius.circular(16), 
-            child: Image.network(
-              unit.imageUrl, 
-              width: 100, 
-              height: 100, 
-              fit: BoxFit.cover
+    return GestureDetector(
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(builder: (context) => UnitDetailScreen(unit: unit)),
+        );
+      },
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(24), 
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.06), 
+              blurRadius: 20, 
+              offset: const Offset(0, 8)
+            )
+          ],
+        ),
+        child: Row(
+          children: [
+            ClipRRect(
+              borderRadius: BorderRadius.circular(16), 
+              child: Hero(
+                tag: 'map_${unit.id}', 
+                child: ShimmerImage(               // <-- CHANGED THIS
+                  imageUrl: unit.imageUrl,         // <-- CHANGED THIS
+                  width: 105, 
+                  height: double.infinity, 
+                  fit: BoxFit.cover
+                ),
+              ),
             ),
-          ),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Expanded(
-                      child: Text(
-                        unit.unitCode, 
-                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: AppColors.textMain), 
-                        maxLines: 1, 
-                        overflow: TextOverflow.ellipsis
-                      ),
-                    ),
-                    Icon(
-                      unit.isFavorite ? Icons.favorite : Icons.favorite_border,
-                      color: unit.isFavorite ? Colors.redAccent : Colors.blueGrey.shade300,
-                      size: 20,
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  "\$ ${(unit.price).toStringAsFixed(0).replaceAllMapped(RegExp(r'\B(?=(\d{3})+(?!\d))'), (match) => ',')}", 
-                  style: const TextStyle(color: AppColors.priceRed, fontWeight: FontWeight.bold, fontSize: 18)
-                ),
-                const SizedBox(height: 8),
-                const Text(
-                  "QUICK SPECS",
-                  style: TextStyle(fontSize: 11, color: Colors.blueGrey, fontWeight: FontWeight.bold, letterSpacing: 0.5),
-                ),
-                const SizedBox(height: 6),
-                FittedBox(
-                  fit: BoxFit.scaleDown,
-                  alignment: Alignment.centerLeft,
-                  child: Row(
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      _mapSpecItem(Icons.hotel_outlined, "${unit.beds} Bed"),
-                      const SizedBox(width: 12),
-                      _mapSpecItem(Icons.bathtub_outlined, "${unit.baths} Bath"),
-                      const SizedBox(width: 12),
-                      _mapSpecItem(Icons.square_foot, "${unit.area}m²"),
+                      Expanded(
+                        child: Text(
+                          unit.unitCode, 
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: AppColors.textMain), 
+                          maxLines: 1, 
+                          overflow: TextOverflow.ellipsis
+                        ),
+                      ),
+                      // FIXED: Using correct Solid vs Outline syntax for the Heart
+                      Icon(
+                        unit.isFavorite ? FlowbiteSolidIcons.heart : FlowbiteOutlineIcons.heart,
+                        color: unit.isFavorite ? AppColors.priceRed : Colors.blueGrey.shade300,
+                        size: 20,
+                      ),
                     ],
                   ),
-                ),
-              ],
+                  const SizedBox(height: 4),
+                  Text(
+                    "\$${(unit.price).toStringAsFixed(0).replaceAllMapped(RegExp(r'\B(?=(\d{3})+(?!\d))'), (match) => ',')}", 
+                    style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.w900, fontSize: 18)
+                  ),
+                  const Spacer(),
+                  const Text(
+                    "QUICK SPECS",
+                    style: TextStyle(fontSize: 10, color: Colors.blueGrey, fontWeight: FontWeight.bold, letterSpacing: 0.5),
+                  ),
+                  const SizedBox(height: 6),
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerLeft,
+                    child: Row(
+                      children: [
+                        // Safely using Material Icons for architecture 
+                        _mapSpecItem(Icons.hotel_outlined, "${unit.beds}"),
+                        const SizedBox(width: 12),
+                        _mapSpecItem(Icons.bathtub_outlined, "${unit.baths}"),
+                        const SizedBox(width: 12),
+                        _mapSpecItem(Icons.square_foot, "${unit.area}m²"),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -283,9 +301,9 @@ class _ExploreScreenState extends State<ExploreScreen> {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(icon, size: 14, color: Colors.blueGrey.shade400),
-        const SizedBox(width: 4),
-        Text(text, style: TextStyle(fontSize: 12, color: Colors.blueGrey.shade700)),
+        Icon(icon, size: 14, color: Colors.blueGrey.shade500),
+        const SizedBox(width: 6),
+        Text(text, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.blueGrey.shade700)),
       ],
     );
   }
